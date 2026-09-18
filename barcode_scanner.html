@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>바코드 스캐너</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root{
+    --bg: #0e1013;
+    --panel: #171a1f;
+    --panel-2: #1f232a;
+    --line: #2a2f37;
+    --text: #f4f4f1;
+    --muted: #8b929e;
+    --beam: #4fd1ff;
+    --ok: #35d399;
+    --warn: #f5a524;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif;
+    overscroll-behavior: none;
+  }
+  .app {
+    max-width: 480px; margin: 0 auto; height: 100dvh;
+    display: flex; flex-direction: column;
+  }
+  header {
+    padding: 18px 20px 10px;
+    display: flex; align-items: baseline; justify-content: space-between;
+  }
+  header h1 {
+    font-size: 17px; font-weight: 600; margin: 0; letter-spacing: -0.01em;
+  }
+  header .count {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px; color: var(--muted);
+  }
+  .scan-wrap {
+    position: relative;
+    margin: 4px 16px 14px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: #000;
+    aspect-ratio: 3 / 4;
+  }
+  #reader { width: 100%; height: 100%; }
+  #reader video { width: 100% !important; height: 100% !important; object-fit: cover; }
+  /* hide the library's own default UI chrome */
+  #reader__scan_region img { display: none; }
+  #reader__dashboard { display: none !important; }
+
+  .frame {
+    position: absolute; inset: 0; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .frame .box {
+    position: relative;
+    width: 78%; height: 34%;
+    border-radius: 10px;
+  }
+  .frame .box::before, .frame .box::after,
+  .frame .corners span {
+    content: '';
+  }
+  .corner {
+    position: absolute; width: 22px; height: 22px;
+    border: 2.5px solid var(--beam);
+  }
+  .corner.tl { top: -2px; left: -2px; border-right: none; border-bottom: none; border-top-left-radius: 8px; }
+  .corner.tr { top: -2px; right: -2px; border-left: none; border-bottom: none; border-top-right-radius: 8px; }
+  .corner.bl { bottom: -2px; left: -2px; border-right: none; border-top: none; border-bottom-left-radius: 8px; }
+  .corner.br { bottom: -2px; right: -2px; border-left: none; border-top: none; border-bottom-right-radius: 8px; }
+  .beamline {
+    position: absolute; left: 6%; right: 6%; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--beam), transparent);
+    top: 20%;
+    animation: sweep 2.2s ease-in-out infinite;
+    box-shadow: 0 0 8px 1px var(--beam);
+  }
+  @keyframes sweep {
+    0%, 100% { top: 18%; opacity: .9; }
+    50% { top: 82%; opacity: .5; }
+  }
+  .hint {
+    position: absolute; bottom: 14px; left: 0; right: 0;
+    text-align: center; font-size: 12.5px; color: #d7dbe2;
+    background: rgba(0,0,0,.35); padding: 6px 0;
+  }
+  .status-bar {
+    padding: 0 16px 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px; color: var(--muted);
+    min-height: 18px;
+  }
+
+  .sheet {
+    margin: 0 16px 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    flex: 1;
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .placeholder {
+    margin: auto; text-align: center; color: var(--muted); font-size: 13.5px;
+    padding: 20px 10px; line-height: 1.5;
+  }
+
+  .result-card { display: flex; gap: 12px; }
+  .result-thumb {
+    width: 64px; height: 64px; border-radius: 10px; background: var(--panel-2);
+    flex-shrink: 0; overflow: hidden; display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--line);
+  }
+  .result-thumb img { width: 100%; height: 100%; object-fit: contain; }
+  .result-body { flex: 1; min-width: 0; }
+  .result-name { font-size: 15px; font-weight: 600; line-height: 1.3; }
+  .result-brand { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .result-code {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--muted);
+    margin-top: 6px; letter-spacing: 0.02em;
+  }
+  .badge {
+    display: inline-block; font-size: 10.5px; font-weight: 600;
+    padding: 2px 7px; border-radius: 20px; margin-top: 6px;
+  }
+  .badge.ok { background: rgba(53,211,153,.14); color: var(--ok); }
+  .badge.warn { background: rgba(245,165,36,.14); color: var(--warn); }
+
+  .actions { display: flex; gap: 8px; margin-top: 4px; }
+  button.link-btn {
+    flex: 1; background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 10px; border-radius: 9px; cursor: pointer;
+  }
+  button.link-btn:active { background: #262b33; }
+
+  .history-title {
+    font-size: 12px; color: var(--muted); margin-top: 4px;
+    border-top: 1px solid var(--line); padding-top: 10px;
+  }
+  .history-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-item .h-name { font-weight: 500; }
+  .history-item .h-code {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted);
+  }
+
+  .primary-btn {
+    margin: 0 16px 18px;
+    background: var(--beam); color: #04202a; border: none;
+    font-family: inherit; font-weight: 600; font-size: 15px;
+    padding: 14px; border-radius: 12px; cursor: pointer;
+  }
+  .primary-btn:active { opacity: .85; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>바코드 스캐너</h1>
+    <span class="count" id="scanCount">0건 스캔</span>
+  </header>
+
+  <div class="scan-wrap">
+    <div id="reader"></div>
+    <div class="frame">
+      <div class="box">
+        <div class="corner tl"></div>
+        <div class="corner tr"></div>
+        <div class="corner bl"></div>
+        <div class="corner br"></div>
+        <div class="beamline"></div>
+      </div>
+    </div>
+    <div class="hint" id="hint">바코드를 프레임 안에 맞춰주세요</div>
+  </div>
+
+  <div class="status-bar" id="statusBar">카메라 준비 중...</div>
+
+  <div class="sheet" id="sheet">
+    <div class="placeholder" id="placeholder">
+      아직 스캔한 바코드가 없습니다.<br>카메라를 바코드에 비추면 자동으로 인식됩니다.
+    </div>
+  </div>
+
+  <button class="primary-btn" id="rescanBtn" style="display:none;">다시 스캔</button>
+</div>
+
+<script>
+// Code.gs를 구글시트에 배포한 뒤 나오는 웹 앱 URL을 여기에 붙여넣으세요.
+const GAS_URL = 'YOUR_GAS_WEB_APP_URL_HERE';
+
+const statusBar = document.getElementById('statusBar');
+const sheet = document.getElementById('sheet');
+const placeholder = document.getElementById('placeholder');
+const rescanBtn = document.getElementById('rescanBtn');
+const scanCount = document.getElementById('scanCount');
+const hint = document.getElementById('hint');
+
+let history = [];
+let scanner = null;
+let paused = false;
+
+function setStatus(text) { statusBar.textContent = text; }
+
+function updateCount() {
+  scanCount.textContent = history.length + '건 스캔';
+}
+
+async function lookupProduct(code) {
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json`);
+    const data = await res.json();
+    if (data.status === 1 && data.product) {
+      return {
+        found: true,
+        name: data.product.product_name_ko || data.product.product_name || '이름 없음',
+        brand: data.product.brands || '',
+        image: data.product.image_front_small_url || data.product.image_url || null
+      };
+    }
+  } catch (e) {
+    // 네트워크 오류는 아래 not-found 처리로 대체
+  }
+  return { found: false };
+}
+
+function renderResult(code, info) {
+  placeholder.remove ? null : null;
+  const card = document.createElement('div');
+  card.className = 'result-card';
+
+  const thumb = document.createElement('div');
+  thumb.className = 'result-thumb';
+  if (info.found && info.image) {
+    const img = document.createElement('img');
+    img.src = info.image;
+    thumb.appendChild(img);
+  } else {
+    thumb.textContent = '—';
+    thumb.style.color = 'var(--muted)';
+    thumb.style.fontSize = '20px';
+  }
+
+  const body = document.createElement('div');
+  body.className = 'result-body';
+  body.innerHTML = `
+    <div class="result-name">${info.found ? escapeHtml(info.name) : '제품 정보를 찾을 수 없어요'}</div>
+    ${info.found && info.brand ? `<div class="result-brand">${escapeHtml(info.brand)}</div>` : ''}
+    <div class="result-code">${code}</div>
+    <span class="badge ${info.found ? 'ok' : 'warn'}">${info.found ? '조회됨' : '미등록 바코드'}</span>
+  `;
+
+  card.appendChild(thumb);
+  card.appendChild(body);
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  const searchBtn = document.createElement('button');
+  searchBtn.className = 'link-btn';
+  searchBtn.textContent = '웹에서 검색';
+  searchBtn.onclick = () => window.open(`https://www.google.com/search?q=${code}`, '_blank');
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'link-btn';
+  copyBtn.textContent = '코드 복사';
+  copyBtn.onclick = () => {
+    navigator.clipboard?.writeText(code);
+    copyBtn.textContent = '복사됨';
+    setTimeout(() => copyBtn.textContent = '코드 복사', 1200);
+  };
+  actions.appendChild(searchBtn);
+  actions.appendChild(copyBtn);
+
+  const wrap = document.createElement('div');
+  wrap.appendChild(card);
+  wrap.appendChild(actions);
+
+  // 결과를 맨 위에, 기존 내용 위로
+  sheet.innerHTML = '';
+  sheet.appendChild(wrap);
+
+  if (history.length > 0) {
+    const histTitle = document.createElement('div');
+    histTitle.className = 'history-title';
+    histTitle.textContent = '이전 스캔';
+    sheet.appendChild(histTitle);
+    history.slice(1).forEach(h => {
+      const item = document.createElement('div');
+      item.className = 'history-item';
+      item.innerHTML = `<span class="h-name">${h.found ? escapeHtml(h.name) : '미등록'}</span><span class="h-code">${h.code}</span>`;
+      sheet.appendChild(item);
+    });
+  }
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function saveToSheet(code, info) {
+  if (!GAS_URL || GAS_URL.indexOf('YOUR_GAS_WEB_APP_URL_HERE') !== -1) return;
+  fetch(GAS_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({
+      code: code,
+      name: info.found ? info.name : '',
+      brand: info.found ? (info.brand || '') : '',
+      found: !!info.found
+    })
+  }).catch(() => { /* 저장 실패는 스캔 흐름을 막지 않음 */ });
+}
+
+async function onScanSuccess(decodedText) {
+  if (paused) return;
+  paused = true;
+  hint.textContent = '인식됨 · 정보 조회 중...';
+  setStatus('제품 정보 조회 중...');
+  scanner.pause(true);
+
+  const info = await lookupProduct(decodedText);
+  history.unshift({ code: decodedText, found: info.found, name: info.name });
+  updateCount();
+  renderResult(decodedText, info);
+  saveToSheet(decodedText, info);
+
+  setStatus('스캔 완료');
+  hint.textContent = '다시 스캔하려면 아래 버튼을 눌러주세요';
+  rescanBtn.style.display = 'block';
+}
+
+function resumeScanning() {
+  paused = false;
+  rescanBtn.style.display = 'none';
+  hint.textContent = '바코드를 프레임 안에 맞춰주세요';
+  setStatus('스캔 중...');
+  scanner.resume();
+}
+
+rescanBtn.addEventListener('click', resumeScanning);
+
+window.addEventListener('load', () => {
+  scanner = new Html5Qrcode('reader', {
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.ITF,
+      Html5QrcodeSupportedFormats.CODABAR,
+      Html5QrcodeSupportedFormats.QR_CODE
+    ],
+    verbose: false
+  });
+
+  scanner.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 240, height: 130 } },
+    onScanSuccess,
+    () => {} // 프레임마다 실패하는 건 정상 동작이므로 무시
+  ).then(() => {
+    setStatus('스캔 중...');
+  }).catch(err => {
+    setStatus('카메라를 시작할 수 없습니다');
+    hint.textContent = '브라우저의 카메라 권한을 확인해주세요';
+    placeholder.textContent = '카메라 접근이 거부되었거나 지원되지 않는 환경입니다. HTTPS 환경에서 카메라 권한을 허용해주세요.';
+  });
+});
+</script>
+</body>
+</html>
