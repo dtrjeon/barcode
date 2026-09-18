@@ -41,8 +41,9 @@
     display: flex; flex-direction: column;
   }
   header {
-    padding: 18px 20px 10px;
+    padding: 14px 20px 8px;
     display: flex; align-items: baseline; justify-content: space-between;
+    flex: 0 0 auto;
   }
   header h1 {
     font-size: 17px; font-weight: 600; margin: 0; letter-spacing: -0.01em;
@@ -51,13 +52,29 @@
     font-family: 'IBM Plex Mono', monospace;
     font-size: 12px; color: var(--muted);
   }
+
+  .split {
+    flex: 1; min-height: 0;
+    display: flex; flex-direction: column;
+  }
+  .scan-half {
+    flex: 1 1 50%; min-height: 0;
+    display: flex; flex-direction: column;
+  }
+  .text-half {
+    flex: 1 1 50%; min-height: 0;
+    display: flex; flex-direction: column;
+    border-top: 1px solid var(--line);
+  }
+
   .mode-switch {
     display: flex; gap: 6px;
-    margin: 2px 16px 12px;
+    margin: 10px 16px 10px;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 11px;
     padding: 4px;
+    flex: 0 0 auto;
   }
   .mode-btn {
     flex: 1;
@@ -71,11 +88,11 @@
 
   .scan-wrap {
     position: relative;
-    margin: 4px 16px 14px;
+    margin: 0 16px 12px;
     border-radius: var(--radius);
     overflow: hidden;
     background: #000;
-    aspect-ratio: 3 / 4;
+    flex: 1; min-height: 0;
   }
   #reader { width: 100%; height: 100%; }
   #reader video { width: 100% !important; height: 100% !important; object-fit: cover; }
@@ -125,15 +142,16 @@
     font-family: 'IBM Plex Mono', monospace;
     font-size: 12px; color: var(--muted);
     min-height: 18px;
+    flex: 0 0 auto;
   }
 
   .sheet {
-    margin: 0 16px 16px;
+    margin: 0 16px 12px;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: var(--radius);
     padding: 16px;
-    flex: 1;
+    flex: 1; min-height: 0;
     overflow-y: auto;
     display: flex; flex-direction: column; gap: 10px;
   }
@@ -198,19 +216,21 @@
   }
 
   .primary-btn {
-    margin: 0 16px 18px;
+    margin: 0 16px 14px;
     background: var(--beam); color: #04202a; border: none;
     font-family: inherit; font-weight: 600; font-size: 15px;
     padding: 14px; border-radius: 12px; cursor: pointer;
+    flex: 0 0 auto;
   }
   .primary-btn:active { opacity: .85; }
 
   .master-panel {
-    margin: 2px 16px 12px;
+    margin: 12px 16px 10px;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 12px;
     padding: 12px;
+    flex: 0 0 auto;
   }
   .master-label {
     font-size: 12px; color: var(--muted); margin-bottom: 8px;
@@ -265,45 +285,51 @@
     <span class="count" id="scanCount">0건 스캔</span>
   </header>
 
-  <div class="mode-switch" id="modeSwitch">
-    <button class="mode-btn active" data-mode="all">전체</button>
-    <button class="mode-btn" data-mode="barcode">바코드</button>
-    <button class="mode-btn" data-mode="qr">QR코드</button>
-  </div>
+  <div class="split">
+    <div class="scan-half">
+      <div class="mode-switch" id="modeSwitch">
+        <button class="mode-btn active" data-mode="all">전체</button>
+        <button class="mode-btn" data-mode="barcode">바코드</button>
+        <button class="mode-btn" data-mode="qr">QR코드</button>
+      </div>
 
-  <div class="master-panel">
-    <div class="master-label">마스터 번호 등록 (스캔한 코드와 대조합니다)</div>
-    <div class="master-input-row">
-      <input type="text" id="masterInput" placeholder="번호 입력 후 등록" inputmode="text">
-      <button id="masterAddBtn">등록</button>
-    </div>
-    <div class="master-chips" id="masterChips"></div>
-    <div class="master-empty-hint" id="masterEmptyHint">등록된 번호가 없으면 대조 없이 일반 스캔만 동작합니다.</div>
-  </div>
-
-  <div class="scan-wrap">
-    <div id="reader"></div>
-    <div class="frame">
-      <div class="box">
-        <div class="corner tl"></div>
-        <div class="corner tr"></div>
-        <div class="corner bl"></div>
-        <div class="corner br"></div>
-        <div class="beamline"></div>
+      <div class="scan-wrap">
+        <div id="reader"></div>
+        <div class="frame">
+          <div class="box">
+            <div class="corner tl"></div>
+            <div class="corner tr"></div>
+            <div class="corner bl"></div>
+            <div class="corner br"></div>
+            <div class="beamline"></div>
+          </div>
+        </div>
+        <div class="hint" id="hint">바코드 또는 QR코드를 프레임 안에 맞춰주세요</div>
       </div>
     </div>
-    <div class="hint" id="hint">바코드 또는 QR코드를 프레임 안에 맞춰주세요</div>
-  </div>
 
-  <div class="status-bar" id="statusBar">카메라 준비 중...</div>
+    <div class="text-half">
+      <div class="master-panel">
+        <div class="master-label">마스터 번호 등록 (스캔한 코드와 대조합니다)</div>
+        <div class="master-input-row">
+          <input type="text" id="masterInput" placeholder="번호 입력 후 등록" inputmode="text">
+          <button id="masterAddBtn">등록</button>
+        </div>
+        <div class="master-chips" id="masterChips"></div>
+        <div class="master-empty-hint" id="masterEmptyHint">등록된 번호가 없으면 대조 없이 일반 스캔만 동작합니다.</div>
+      </div>
 
-  <div class="sheet" id="sheet">
-    <div class="placeholder" id="placeholder">
-      아직 스캔한 코드가 없습니다.<br>카메라를 바코드나 QR코드에 비추면 자동으로 인식됩니다.
+      <div class="status-bar" id="statusBar">카메라 준비 중...</div>
+
+      <div class="sheet" id="sheet">
+        <div class="placeholder" id="placeholder">
+          아직 스캔한 코드가 없습니다.<br>카메라를 바코드나 QR코드에 비추면 자동으로 인식됩니다.
+        </div>
+      </div>
+
+      <button class="primary-btn" id="rescanBtn" style="display:none;">다시 스캔</button>
     </div>
   </div>
-
-  <button class="primary-btn" id="rescanBtn" style="display:none;">다시 스캔</button>
 </div>
 
 <script>
