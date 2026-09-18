@@ -51,6 +51,24 @@
     font-family: 'IBM Plex Mono', monospace;
     font-size: 12px; color: var(--muted);
   }
+  .mode-switch {
+    display: flex; gap: 6px;
+    margin: 2px 16px 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    padding: 4px;
+  }
+  .mode-btn {
+    flex: 1;
+    background: transparent; border: none; color: var(--muted);
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 8px 0; border-radius: 8px; cursor: pointer;
+  }
+  .mode-btn.active {
+    background: var(--panel-2); color: var(--text);
+  }
+
   .scan-wrap {
     position: relative;
     margin: 4px 16px 14px;
@@ -175,6 +193,58 @@
     padding: 14px; border-radius: 12px; cursor: pointer;
   }
   .primary-btn:active { opacity: .85; }
+
+  .master-panel {
+    margin: 2px 16px 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px;
+  }
+  .master-label {
+    font-size: 12px; color: var(--muted); margin-bottom: 8px;
+  }
+  .master-input-row { display: flex; gap: 8px; }
+  .master-input-row input {
+    flex: 1; min-width: 0;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    font-family: 'IBM Plex Mono', monospace; font-size: 13px;
+    padding: 10px 12px; border-radius: 9px;
+  }
+  .master-input-row input:focus { outline: 1.5px solid var(--beam); }
+  .master-input-row button {
+    background: var(--beam); color: #04202a; border: none;
+    font-family: inherit; font-weight: 600; font-size: 13px;
+    padding: 0 16px; border-radius: 9px; cursor: pointer;
+  }
+  .master-chips {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
+  }
+  .master-chip {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 20px; padding: 5px 6px 5px 10px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 11.5px;
+  }
+  .master-chip button {
+    background: none; border: none; color: var(--muted);
+    font-size: 13px; line-height: 1; cursor: pointer; padding: 2px;
+  }
+  .master-empty-hint { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+
+  .match-banner {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px; border-radius: 12px; margin-bottom: 10px;
+  }
+  .match-banner.ok { background: rgba(53,211,153,.14); }
+  .match-banner.bad { background: rgba(239,90,90,.14); }
+  .match-icon { font-size: 22px; line-height: 1; }
+  .match-text-main { font-size: 15px; font-weight: 700; }
+  .match-banner.ok .match-text-main { color: var(--ok); }
+  .match-banner.bad .match-text-main { color: #ef5a5a; }
+  .match-text-sub {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--muted); margin-top: 2px;
+  }
 </style>
 </head>
 <body>
@@ -183,6 +253,22 @@
     <h1>바코드 스캐너</h1>
     <span class="count" id="scanCount">0건 스캔</span>
   </header>
+
+  <div class="mode-switch" id="modeSwitch">
+    <button class="mode-btn active" data-mode="all">전체</button>
+    <button class="mode-btn" data-mode="barcode">바코드</button>
+    <button class="mode-btn" data-mode="qr">QR코드</button>
+  </div>
+
+  <div class="master-panel">
+    <div class="master-label">마스터 번호 등록 (스캔한 코드와 대조합니다)</div>
+    <div class="master-input-row">
+      <input type="text" id="masterInput" placeholder="번호 입력 후 등록" inputmode="text">
+      <button id="masterAddBtn">등록</button>
+    </div>
+    <div class="master-chips" id="masterChips"></div>
+    <div class="master-empty-hint" id="masterEmptyHint">등록된 번호가 없으면 대조 없이 일반 스캔만 동작합니다.</div>
+  </div>
 
   <div class="scan-wrap">
     <div id="reader"></div>
@@ -195,14 +281,14 @@
         <div class="beamline"></div>
       </div>
     </div>
-    <div class="hint" id="hint">바코드를 프레임 안에 맞춰주세요</div>
+    <div class="hint" id="hint">바코드 또는 QR코드를 프레임 안에 맞춰주세요</div>
   </div>
 
   <div class="status-bar" id="statusBar">카메라 준비 중...</div>
 
   <div class="sheet" id="sheet">
     <div class="placeholder" id="placeholder">
-      아직 스캔한 바코드가 없습니다.<br>카메라를 바코드에 비추면 자동으로 인식됩니다.
+      아직 스캔한 코드가 없습니다.<br>카메라를 바코드나 QR코드에 비추면 자동으로 인식됩니다.
     </div>
   </div>
 
@@ -219,10 +305,63 @@ const placeholder = document.getElementById('placeholder');
 const rescanBtn = document.getElementById('rescanBtn');
 const scanCount = document.getElementById('scanCount');
 const hint = document.getElementById('hint');
+const masterInput = document.getElementById('masterInput');
+const masterAddBtn = document.getElementById('masterAddBtn');
+const masterChips = document.getElementById('masterChips');
+const masterEmptyHint = document.getElementById('masterEmptyHint');
 
 let history = [];
 let scanner = null;
 let paused = false;
+let masterNumbers = [];
+
+try {
+  masterNumbers = JSON.parse(localStorage.getItem('masterNumbers') || '[]');
+} catch (e) {
+  masterNumbers = [];
+}
+
+function saveMasterNumbers() {
+  try { localStorage.setItem('masterNumbers', JSON.stringify(masterNumbers)); } catch (e) {}
+}
+
+function renderMasterChips() {
+  masterChips.innerHTML = '';
+  masterNumbers.forEach((num) => {
+    const chip = document.createElement('div');
+    chip.className = 'master-chip';
+    chip.innerHTML = `<span>${escapeHtml(num)}</span>`;
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = '×';
+    removeBtn.onclick = () => {
+      masterNumbers = masterNumbers.filter(n => n !== num);
+      saveMasterNumbers();
+      renderMasterChips();
+    };
+    chip.appendChild(removeBtn);
+    masterChips.appendChild(chip);
+  });
+  masterEmptyHint.style.display = masterNumbers.length ? 'none' : 'block';
+}
+
+function addMasterNumber() {
+  const val = masterInput.value.trim();
+  if (!val) return;
+  if (!masterNumbers.includes(val)) {
+    masterNumbers.push(val);
+    saveMasterNumbers();
+    renderMasterChips();
+  }
+  masterInput.value = '';
+  masterInput.focus();
+}
+
+masterAddBtn.addEventListener('click', addMasterNumber);
+masterInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') addMasterNumber();
+});
+
+renderMasterChips();
 
 function setStatus(text) { statusBar.textContent = text; }
 
@@ -248,51 +387,89 @@ async function lookupProduct(code) {
   return { found: false };
 }
 
-function renderResult(code, info) {
-  placeholder.remove ? null : null;
+function isLikelyUrl(text) {
+  return /^https?:\/\/\S+$/i.test(text.trim());
+}
+
+function renderResult(code, info, matchInfo) {
   const card = document.createElement('div');
   card.className = 'result-card';
 
   const thumb = document.createElement('div');
   thumb.className = 'result-thumb';
-  if (info.found && info.image) {
-    const img = document.createElement('img');
-    img.src = info.image;
-    thumb.appendChild(img);
-  } else {
-    thumb.textContent = '—';
-    thumb.style.color = 'var(--muted)';
-    thumb.style.fontSize = '20px';
-  }
 
   const body = document.createElement('div');
   body.className = 'result-body';
-  body.innerHTML = `
-    <div class="result-name">${info.found ? escapeHtml(info.name) : '제품 정보를 찾을 수 없어요'}</div>
-    ${info.found && info.brand ? `<div class="result-brand">${escapeHtml(info.brand)}</div>` : ''}
-    <div class="result-code">${code}</div>
-    <span class="badge ${info.found ? 'ok' : 'warn'}">${info.found ? '조회됨' : '미등록 바코드'}</span>
-  `;
-
-  card.appendChild(thumb);
-  card.appendChild(body);
 
   const actions = document.createElement('div');
   actions.className = 'actions';
-  const searchBtn = document.createElement('button');
-  searchBtn.className = 'link-btn';
-  searchBtn.textContent = '웹에서 검색';
-  searchBtn.onclick = () => window.open(`https://www.google.com/search?q=${code}`, '_blank');
-  const copyBtn = document.createElement('button');
-  copyBtn.className = 'link-btn';
-  copyBtn.textContent = '코드 복사';
-  copyBtn.onclick = () => {
-    navigator.clipboard?.writeText(code);
-    copyBtn.textContent = '복사됨';
-    setTimeout(() => copyBtn.textContent = '코드 복사', 1200);
-  };
-  actions.appendChild(searchBtn);
-  actions.appendChild(copyBtn);
+
+  if (info.type === 'qr') {
+    thumb.textContent = 'QR';
+    thumb.style.color = 'var(--beam)';
+    thumb.style.fontFamily = "'IBM Plex Mono', monospace";
+    thumb.style.fontSize = '13px';
+    thumb.style.fontWeight = '600';
+
+    body.innerHTML = `
+      <div class="result-name">${info.isUrl ? '링크 QR코드' : 'QR코드 내용'}</div>
+      <div class="result-code" style="word-break:break-all; font-size:12.5px; margin-top:4px;">${escapeHtml(info.text)}</div>
+      <span class="badge ok">QR 인식됨</span>
+    `;
+
+    if (info.isUrl) {
+      const openBtn = document.createElement('button');
+      openBtn.className = 'link-btn';
+      openBtn.textContent = '링크 열기';
+      openBtn.onclick = () => window.open(info.text, '_blank');
+      actions.appendChild(openBtn);
+    }
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'link-btn';
+    copyBtn.textContent = '내용 복사';
+    copyBtn.onclick = () => {
+      navigator.clipboard?.writeText(info.text);
+      copyBtn.textContent = '복사됨';
+      setTimeout(() => copyBtn.textContent = '내용 복사', 1200);
+    };
+    actions.appendChild(copyBtn);
+
+  } else {
+    if (info.found && info.image) {
+      const img = document.createElement('img');
+      img.src = info.image;
+      thumb.appendChild(img);
+    } else {
+      thumb.textContent = '—';
+      thumb.style.color = 'var(--muted)';
+      thumb.style.fontSize = '20px';
+    }
+
+    body.innerHTML = `
+      <div class="result-name">${info.found ? escapeHtml(info.name) : '제품 정보를 찾을 수 없어요'}</div>
+      ${info.found && info.brand ? `<div class="result-brand">${escapeHtml(info.brand)}</div>` : ''}
+      <div class="result-code">${code}</div>
+      <span class="badge ${info.found ? 'ok' : 'warn'}">${info.found ? '조회됨' : '미등록 바코드'}</span>
+    `;
+
+    const searchBtn = document.createElement('button');
+    searchBtn.className = 'link-btn';
+    searchBtn.textContent = '웹에서 검색';
+    searchBtn.onclick = () => window.open(`https://www.google.com/search?q=${code}`, '_blank');
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'link-btn';
+    copyBtn.textContent = '코드 복사';
+    copyBtn.onclick = () => {
+      navigator.clipboard?.writeText(code);
+      copyBtn.textContent = '복사됨';
+      setTimeout(() => copyBtn.textContent = '코드 복사', 1200);
+    };
+    actions.appendChild(searchBtn);
+    actions.appendChild(copyBtn);
+  }
+
+  card.appendChild(thumb);
+  card.appendChild(body);
 
   const wrap = document.createElement('div');
   wrap.appendChild(card);
@@ -300,6 +477,20 @@ function renderResult(code, info) {
 
   // 결과를 맨 위에, 기존 내용 위로
   sheet.innerHTML = '';
+
+  if (matchInfo && matchInfo.registered) {
+    const banner = document.createElement('div');
+    banner.className = 'match-banner ' + (matchInfo.isMatch ? 'ok' : 'bad');
+    banner.innerHTML = `
+      <div class="match-icon">${matchInfo.isMatch ? '✅' : '❌'}</div>
+      <div>
+        <div class="match-text-main">${matchInfo.isMatch ? '마스터 번호 일치' : '등록되지 않은 번호'}</div>
+        <div class="match-text-sub">${escapeHtml(code)}</div>
+      </div>
+    `;
+    sheet.appendChild(banner);
+  }
+
   sheet.appendChild(wrap);
 
   if (history.length > 0) {
@@ -310,7 +501,7 @@ function renderResult(code, info) {
     history.slice(1).forEach(h => {
       const item = document.createElement('div');
       item.className = 'history-item';
-      item.innerHTML = `<span class="h-name">${h.found ? escapeHtml(h.name) : '미등록'}</span><span class="h-code">${h.code}</span>`;
+      item.innerHTML = `<span class="h-name">${escapeHtml(h.name)}</span><span class="h-code">${h.code}</span>`;
       sheet.appendChild(item);
     });
   }
@@ -322,33 +513,56 @@ function escapeHtml(str) {
   return d.innerHTML;
 }
 
-function saveToSheet(code, info) {
+function saveToSheet(code, info, matchInfo) {
   if (!GAS_URL || GAS_URL.indexOf('YOUR_GAS_WEB_APP_URL_HERE') !== -1) return;
+  const matchField = matchInfo && matchInfo.registered ? (matchInfo.isMatch ? '일치' : '불일치') : '';
+  const payload = info.type === 'qr'
+    ? { code: code, name: info.text, brand: 'QR코드', found: true, match: matchField }
+    : { code: code, name: info.found ? info.name : '', brand: info.found ? (info.brand || '') : '', found: !!info.found, match: matchField };
+
   fetch(GAS_URL, {
     method: 'POST',
     mode: 'no-cors',
     headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({
-      code: code,
-      name: info.found ? info.name : '',
-      brand: info.found ? (info.brand || '') : '',
-      found: !!info.found
-    })
+    body: JSON.stringify(payload)
   }).catch(() => { /* 저장 실패는 스캔 흐름을 막지 않음 */ });
 }
 
-async function onScanSuccess(decodedText) {
+async function onScanSuccess(decodedText, decodedResult) {
   if (paused) return;
   paused = true;
-  hint.textContent = '인식됨 · 정보 조회 중...';
-  setStatus('제품 정보 조회 중...');
   scanner.pause(true);
 
-  const info = await lookupProduct(decodedText);
-  history.unshift({ code: decodedText, found: info.found, name: info.name });
+  const registered = masterNumbers.length > 0;
+  const isMatch = registered && masterNumbers.includes(decodedText.trim());
+  const matchInfo = { registered, isMatch };
+
+  if (registered && !isMatch) {
+    playErrorTone();
+  } else {
+    playBeep();
+  }
+
+  const format = decodedResult?.result?.format?.formatName || '';
+  const isQr = format === 'QR_CODE';
+
+  let info;
+  if (isQr) {
+    hint.textContent = 'QR코드 인식됨';
+    setStatus('QR코드 인식 완료');
+    info = { type: 'qr', text: decodedText, isUrl: isLikelyUrl(decodedText) };
+    history.unshift({ code: decodedText, name: decodedText });
+  } else {
+    hint.textContent = '인식됨 · 정보 조회 중...';
+    setStatus('제품 정보 조회 중...');
+    const lookup = await lookupProduct(decodedText);
+    info = { type: 'product', ...lookup };
+    history.unshift({ code: decodedText, name: info.found ? info.name : '미등록' });
+  }
+
   updateCount();
-  renderResult(decodedText, info);
-  saveToSheet(decodedText, info);
+  renderResult(decodedText, info, matchInfo);
+  saveToSheet(decodedText, info, matchInfo);
 
   setStatus('스캔 완료');
   hint.textContent = '다시 스캔하려면 아래 버튼을 눌러주세요';
@@ -358,7 +572,7 @@ async function onScanSuccess(decodedText) {
 function resumeScanning() {
   paused = false;
   rescanBtn.style.display = 'none';
-  hint.textContent = '바코드를 프레임 안에 맞춰주세요';
+  hint.textContent = MODE_HINT[currentMode];
   setStatus('스캔 중...');
   scanner.resume();
 }
@@ -373,19 +587,77 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-window.addEventListener('load', () => {
+const BARCODE_FORMATS = [
+  Html5QrcodeSupportedFormats.EAN_13,
+  Html5QrcodeSupportedFormats.EAN_8,
+  Html5QrcodeSupportedFormats.UPC_A,
+  Html5QrcodeSupportedFormats.UPC_E,
+  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.CODE_39,
+  Html5QrcodeSupportedFormats.ITF,
+  Html5QrcodeSupportedFormats.CODABAR
+];
+const QR_FORMATS = [Html5QrcodeSupportedFormats.QR_CODE];
+const MODE_FORMATS = {
+  all: BARCODE_FORMATS.concat(QR_FORMATS),
+  barcode: BARCODE_FORMATS,
+  qr: QR_FORMATS
+};
+const MODE_HINT = {
+  all: '바코드 또는 QR코드를 프레임 안에 맞춰주세요',
+  barcode: '바코드를 프레임 안에 맞춰주세요',
+  qr: 'QR코드를 프레임 안에 맞춰주세요'
+};
+
+let currentMode = 'all';
+let audioCtx = null;
+
+function playBeep() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 1000;
+    gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.13);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.14);
+  } catch (e) {
+    // 오디오를 지원하지 않는 환경이면 조용히 무시
+  }
+}
+
+function playErrorTone() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(320, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(180, audioCtx.currentTime + 0.28);
+    gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.2, audioCtx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.3);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.3);
+  } catch (e) {
+    // 오디오를 지원하지 않는 환경이면 조용히 무시
+  }
+}
+
+function startScanner(mode) {
+  currentMode = mode;
+  hint.textContent = MODE_HINT[mode];
+  setStatus('카메라 준비 중...');
+
   scanner = new Html5Qrcode('reader', {
-    formatsToSupport: [
-      Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.ITF,
-      Html5QrcodeSupportedFormats.CODABAR,
-      Html5QrcodeSupportedFormats.QR_CODE
-    ],
+    formatsToSupport: MODE_FORMATS[mode],
     verbose: false
   });
 
@@ -401,6 +673,32 @@ window.addEventListener('load', () => {
     hint.textContent = '브라우저의 카메라 권한을 확인해주세요';
     placeholder.textContent = '카메라 접근이 거부되었거나 지원되지 않는 환경입니다. HTTPS 환경에서 카메라 권한을 허용해주세요.';
   });
+}
+
+function switchMode(mode) {
+  if (mode === currentMode) return;
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+  paused = false;
+  rescanBtn.style.display = 'none';
+
+  if (scanner) {
+    scanner.stop().then(() => scanner.clear()).catch(() => {}).finally(() => {
+      startScanner(mode);
+    });
+  } else {
+    startScanner(mode);
+  }
+}
+
+document.getElementById('modeSwitch').addEventListener('click', (e) => {
+  const btn = e.target.closest('.mode-btn');
+  if (btn) switchMode(btn.dataset.mode);
+});
+
+window.addEventListener('load', () => {
+  startScanner('all');
 });
 </script>
 </body>
