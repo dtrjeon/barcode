@@ -656,10 +656,22 @@ function startScanner(mode) {
   hint.textContent = MODE_HINT[mode];
   setStatus('카메라 준비 중...');
 
+  // 이전 인스턴스가 남긴 video/canvas 등 DOM 잔여물을 확실히 제거
+  const readerEl = document.getElementById('reader');
+  readerEl.innerHTML = '';
+
   scanner = new Html5Qrcode('reader', {
     formatsToSupport: MODE_FORMATS[mode],
     verbose: false
   });
+
+  let settled = false;
+  const startTimeout = setTimeout(() => {
+    if (!settled) {
+      setStatus('카메라 응답이 없습니다');
+      hint.textContent = '카메라를 다시 시작하려면 모드를 다시 눌러주세요';
+    }
+  }, 8000);
 
   scanner.start(
     { facingMode: 'environment' },
@@ -667,8 +679,12 @@ function startScanner(mode) {
     onScanSuccess,
     () => {} // 프레임마다 실패하는 건 정상 동작이므로 무시
   ).then(() => {
+    settled = true;
+    clearTimeout(startTimeout);
     setStatus('스캔 중...');
   }).catch(err => {
+    settled = true;
+    clearTimeout(startTimeout);
     setStatus('카메라를 시작할 수 없습니다');
     hint.textContent = '브라우저의 카메라 권한을 확인해주세요';
     placeholder.textContent = '카메라 접근이 거부되었거나 지원되지 않는 환경입니다. HTTPS 환경에서 카메라 권한을 허용해주세요.';
@@ -676,7 +692,6 @@ function startScanner(mode) {
 }
 
 function switchMode(mode) {
-  if (mode === currentMode) return;
   document.querySelectorAll('.mode-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === mode);
   });
@@ -684,7 +699,9 @@ function switchMode(mode) {
   rescanBtn.style.display = 'none';
 
   if (scanner) {
-    scanner.stop().then(() => scanner.clear()).catch(() => {}).finally(() => {
+    // stop()이 실패하거나(이미 정지 상태 등) 지연되더라도
+    // startScanner가 DOM을 강제로 비우고 새로 그리므로 항상 안전하게 전환됨
+    scanner.stop().catch(() => {}).finally(() => {
       startScanner(mode);
     });
   } else {
