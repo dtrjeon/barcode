@@ -1,4 +1,4 @@
-const CACHE_NAME = 'barcode-scanner-v1';
+const CACHE_NAME = 'barcode-scanner-v2';
 const APP_SHELL = [
   './barcode_scanner.html',
   './manifest.json',
@@ -26,16 +26,15 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // 앱 셸(같은 출처의 html/manifest/아이콘)은 캐시 우선, 실패 시 네트워크
+  // 앱 셸(같은 출처의 html/manifest/아이콘)은 네트워크 우선.
+  // 최신 버전을 항상 먼저 시도하고, 오프라인일 때만 캐시로 대체.
   if (url.origin === self.location.origin) {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        return cached || fetch(event.request).then((res) => {
-          const resClone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, resClone));
-          return res;
-        }).catch(() => cached);
-      })
+      fetch(event.request).then((res) => {
+        const resClone = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, resClone));
+        return res;
+      }).catch(() => caches.match(event.request))
     );
     return;
   }
